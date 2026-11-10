@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+*.pyo
+wallet.json
+settings.json
+downloads/
+.venv/
+venv/
+node_modules/
+.pytest_cache/
+tests/sdk-stub.mjs
+tests/jsx-stub.mjs

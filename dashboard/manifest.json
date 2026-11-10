@@ -1,0 +1,9 @@
+{
+  "name": "theta-edge-node",
+  "label": "Theta Edge Node",
+  "description": "Edge Node control, rewards and node wallet.",
+  "icon": "Server",
+  "version": "0.2.0",
+  "tab": { "hidden": true },
+  "api": "plugin_api.py"
+}

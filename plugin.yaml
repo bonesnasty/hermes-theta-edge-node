@@ -1,0 +1,26 @@
+name: theta-edge-node
+version: "0.2.0"
+description: "Run and monitor a Theta Edge Node from Hermes Desktop: install, launch, stop, track rewards and node-wallet value, and export the node wallet locally."
+author: "Lee P. Mannion"
+manifest_version: 2
+api_version: 1
+kind: standalone
+license: MIT
+homepage: "https://github.com/bonesnasty/hermes-theta-edge-node"
+tags: [theta, edgecloud, node, wallet, desktop, windows]
+requires_hermes: ">=0.21.5"
+provides_tools:
+  - theta_node_status
+  - theta_wallet_address
+provides_hooks: []
+provides_middleware: []
+requires_env: []
+config_schema:
+  auto_launch:
+    type: bool
+    default: true
+    description: "Resume the Edge Node on Hermes launch if it was running when Hermes last exited"
+  edge_node_path:
+    type: str
+    default: ""
+    description: "Optional full path to Theta Edge Node.exe"

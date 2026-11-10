@@ -1,0 +1,5 @@
+[project]
+name = "theta-edge-node"
+version = "0.2.0"
+requires-python = ">=3.11"
+dependencies = ["pycryptodome>=3.20,<4"]
