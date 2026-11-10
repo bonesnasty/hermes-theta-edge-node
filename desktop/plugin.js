@@ -531,12 +531,13 @@ function WalletTab() {
   })
   const verify = useMutation({ mutationFn: () => api('/wallet/verify-export', { method: 'POST' }) })
   const exportKey = useMutation({
-    mutationFn: () => api('/wallet/export', { method: 'POST', body: { password: exportPassword } })
+    mutationFn: () => api('/wallet/export', { method: 'POST', body: { password: exportPassword } }),
+    onSuccess: () => setKeyVisible(true)
   })
   const [advanced, setAdvanced] = useState(false)
   const [exportPassword, setExportPassword] = useState('')
   const [exportWord, setExportWord] = useState('')
-  const [revealed, setRevealed] = useState('')
+  const [keyVisible, setKeyVisible] = useState(false)
   const [message, setMessage] = useState('')
 
   const data = wallet.data || {}
@@ -607,15 +608,15 @@ function WalletTab() {
                   type: 'button',
                   style: S.danger,
                   disabled: exportWord !== 'EXPORT' || !exportPassword || exportKey.isLoading || exportKey.isPending,
-                  onClick: () => { setMessage(''); setRevealed(''); exportKey.mutate() },
+                  onClick: () => { setMessage(''); setKeyVisible(false); exportKey.reset(); exportKey.mutate() },
                   children: 'Reveal private key'
                 }),
-                exportKey.data && exportKey.data.private_key
+                keyVisible && exportKey.data && exportKey.data.private_key
                   ? jsxs('div', { style: { marginTop: '8px' }, children: [
                       jsx('div', { style: S.mono, children: exportKey.data.private_key }),
                       jsxs('div', { style: { ...S.actions, marginTop: '8px' }, children: [
                         jsx('button', { type: 'button', style: S.btn, onClick: () => ctxRef.os.writeClipboard(exportKey.data.private_key), children: 'Copy key' }),
-                        jsx('button', { type: 'button', style: S.btn, onClick: () => setRevealed(''), children: 'Hide' })
+                        jsx('button', { type: 'button', style: S.btn, onClick: () => { setKeyVisible(false); exportKey.reset() }, children: 'Hide' })
                       ] })
                     ] })
                   : null,
