@@ -21,7 +21,7 @@ def collect() -> dict[str, Any]:
             address = ""
     return {
         "plugin": "theta-edge-node",
-        "version": "0.2.0",
+        "version": "0.3.0",
         "platform": platform.platform(),
         "python": sys.version.split()[0],
         "node": edge_rpc.node_status(),

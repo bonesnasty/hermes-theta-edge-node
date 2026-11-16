@@ -1,7 +1,8 @@
 """Windows Theta Edge Node installer, launcher and log reader.
 
-Downloads only from Theta's official endpoint, verifies the Authenticode
-signature before executing, and never installs at plugin import time.
+Downloads only from Theta's official endpoint, verifies the installer against a
+pinned SHA-256 and the pinned Theta Labs Authenticode certificate, and never
+installs at plugin import time.
 """
 
 from __future__ import annotations
@@ -9,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import subprocess
 import threading
 import urllib.parse
@@ -21,15 +23,26 @@ from . import keystore, state
 DOWNLOAD_URL = "https://theta-mkt-api.thetatoken.org/v1/downloads/edge-node/windows"
 ALLOWED_HOSTS = {
     "theta-mkt-api.thetatoken.org",
-    "s3.us-east-2.amazonaws.com",
     "assets.thetatoken.org",
 }
+S3_HOST = "s3.us-east-2.amazonaws.com"
+S3_PATH_PREFIX = "/assets.thetatoken.org/"
 EXE_NAME = "Theta Edge Node.exe"
 INSTALLER_NAME = "ThetaEdgeNodeSetup.exe"
 SIGNATURE_SCRIPT = "verify_signature.ps1"
 
+# Catalog bumps update this table. A build that is not pinned here is refused,
+# so /node/update can only install a reviewed Theta release.
+PINNED_INSTALLERS = {
+    "5.2.26": "6acac6a905cdf74cce703d4b1ada0da18569b32781105ba1557003d10655f4eb",
+}
+SIGNER_SUBJECT = 'CN="Theta Labs, Inc.", O="Theta Labs, Inc.", L=San Jose, S=California, C=US'
+SIGNER_THUMBPRINT = "D5A10D49B0D0CCC53CDA4F3883AD7E23DB107001"
+VERSION_RE = re.compile(r"Setup[+ ](\d+(?:\.\d+)+)\.exe", re.IGNORECASE)
+
 _PROGRESS: dict[str, Any] = {
     "phase": "idle",
+    "version": "",
     "downloaded": 0,
     "total": 0,
     "sha256": "",
@@ -92,11 +105,16 @@ def _registry_paths() -> list[Path]:
     return found
 
 
+def valid_override_path(value: str) -> bool:
+    if not value:
+        return False
+    path = Path(value)
+    return path.name == EXE_NAME and path.is_file()
+
+
 def find_exe(override: str = "") -> Path | None:
-    if override:
-        candidate = Path(override)
-        if candidate.is_file():
-            return candidate
+    if override and valid_override_path(override):
+        return Path(override)
     for candidate in [*_candidate_paths(), *_registry_paths()]:
         if candidate.is_file():
             return candidate
@@ -121,7 +139,10 @@ def node_process_running() -> bool:
 
 
 def launch(exe: Path) -> None:
-    os.startfile(str(exe))  # type: ignore[attr-defined]
+    path = Path(exe)
+    if path.name != EXE_NAME or not path.is_file():
+        raise ValueError(f"refusing to launch {path.name!r}; expected {EXE_NAME}")
+    os.startfile(str(path))  # type: ignore[attr-defined]
 
 
 def stop() -> None:
@@ -135,7 +156,27 @@ def stop() -> None:
 
 def verify_host(url: str) -> bool:
     parsed = urllib.parse.urlparse(url)
-    return parsed.scheme == "https" and parsed.hostname in ALLOWED_HOSTS
+    if parsed.scheme != "https":
+        return False
+    host = (parsed.hostname or "").lower()
+    if host in ALLOWED_HOSTS:
+        return True
+    if host == S3_HOST:
+        return parsed.path.startswith(S3_PATH_PREFIX)
+    return False
+
+
+def installer_version(url: str) -> str:
+    match = VERSION_RE.search(urllib.parse.unquote(url))
+    return match.group(1) if match else ""
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def authenticode(path: Path) -> dict[str, Any]:
@@ -185,19 +226,29 @@ def authenticode(path: Path) -> dict[str, Any]:
     }
 
 
-def verify_installer(path: Path) -> tuple[bool, dict[str, Any], str]:
+def verify_installer(path: Path, version: str) -> tuple[bool, dict[str, Any], str]:
+    actual = _sha256(path)
     info = authenticode(path)
+    info.update({"sha256": actual, "version": version})
+
+    expected = PINNED_INSTALLERS.get(version)
+    if not expected:
+        return False, info, f"installer version {version or 'unknown'} is not pinned"
+    if actual != expected:
+        return False, info, "SHA-256 does not match the pinned build"
     if info.get("status") != "Valid":
         return False, info, f"signature status: {info.get('status') or 'unknown'}"
-    subject = str(info.get("subject") or "")
-    if "theta" not in subject.lower():
-        return False, info, f"signer does not look like Theta Labs: {subject or 'unknown signer'}"
+    if str(info.get("thumbprint") or "").upper() != SIGNER_THUMBPRINT:
+        return False, info, "signer thumbprint does not match the pinned Theta Labs certificate"
+    if str(info.get("subject") or "").strip() != SIGNER_SUBJECT:
+        return False, info, "signer subject does not match the pinned Theta Labs certificate"
     return True, info, ""
 
 
 def download_and_install() -> None:
     _set(
         phase="downloading",
+        version="",
         downloaded=0,
         total=0,
         sha256="",
@@ -210,14 +261,15 @@ def download_and_install() -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     try:
         request = urllib.request.Request(
-            DOWNLOAD_URL, headers={"User-Agent": "hermes-theta-edge-node/0.2"}
+            DOWNLOAD_URL, headers={"User-Agent": "hermes-theta-edge-node/0.3"}
         )
         with urllib.request.urlopen(request, timeout=60) as response:
             final_url = response.geturl()
             if not verify_host(final_url):
                 raise RuntimeError(f"unexpected download host: {urllib.parse.urlparse(final_url).hostname}")
             total = int(response.headers.get("Content-Length") or 0)
-            _set(total=total)
+            version = installer_version(final_url)
+            _set(total=total, version=version)
             digest = hashlib.sha256()
             with open(destination, "wb") as handle:
                 while True:
@@ -228,11 +280,12 @@ def download_and_install() -> None:
                     digest.update(chunk)
                     with _LOCK:
                         _PROGRESS["downloaded"] += len(chunk)
-        _set(phase="verifying", sha256=digest.hexdigest(), path=str(destination))
-        ok, info, error = verify_installer(destination)
+        _set(phase="verifying", sha256=digest.hexdigest(), version=version, path=str(destination))
+        ok, info, error = verify_installer(destination, version)
         _set(signature=info)
         if not ok:
-            _set(phase="failed", error=f"Installer signature check failed: {error}")
+            destination.unlink(missing_ok=True)
+            _set(phase="failed", error=f"Installer verification failed: {error}")
             return
         _set(phase="installing")
         subprocess.run(

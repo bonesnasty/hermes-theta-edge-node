@@ -8,5 +8,6 @@ downloads/
 venv/
 node_modules/
 .pytest_cache/
+.hindsight/
 tests/sdk-stub.mjs
 tests/jsx-stub.mjs

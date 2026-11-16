@@ -54,7 +54,7 @@ class ApiTests(unittest.TestCase):
         self.api._EXPORT_FAILURES.update(count=0, until=0.0)
         app = FastAPI()
         app.include_router(self.api.router, prefix="/api/plugins/theta-edge-node")
-        self.client = TestClient(app)
+        self.client = TestClient(app, client=("127.0.0.1", 50000))
 
     def tearDown(self):
         self.env.stop()
@@ -89,6 +89,22 @@ class ApiTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.json()["auto_launch"])
+
+    def test_settings_rejects_invalid_edge_node_path(self):
+        response = self.client.post(
+            "/api/plugins/theta-edge-node/settings",
+            json={"edge_node_path": r"C:\Windows\System32\cmd.exe"},
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_settings_accepts_valid_edge_node_path(self):
+        exe = Path(self.temp.name) / self.api.installer.EXE_NAME
+        exe.write_bytes(b"stub")
+        response = self.client.post(
+            "/api/plugins/theta-edge-node/settings", json={"edge_node_path": str(exe)}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["edge_node_path"], str(exe))
 
     def test_wallet_no_keystore(self):
         response = self.client.get("/api/plugins/theta-edge-node/wallet")

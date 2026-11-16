@@ -11,7 +11,7 @@ sys.path.insert(0, ROOT)
 
 from theta_core import edge_rpc
 
-DAY = int(datetime(2026, 11, 9, 12, tzinfo=timezone.utc).timestamp() * 1000)
+DAY = int(datetime.now(timezone.utc).timestamp() * 1000)
 
 
 def job(amount: str, status: str, end_time: int = DAY) -> dict:

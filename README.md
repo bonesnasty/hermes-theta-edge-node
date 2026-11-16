@@ -8,7 +8,7 @@ A Hermes Desktop plugin that runs and monitors a Theta Edge Node from a left-han
 ## What it does
 
 - **Node** — first-run setup downloads the official Theta Edge Node installer, verifies its
-  Authenticode signature and SHA-256, installs it, and launches it. After that: launch, stop,
+  pinned SHA-256 and Theta Labs Authenticode certificate, installs it, and launches it. After that: launch, stop,
   reinstall/update, version, holder address, sync/peer status, pending/paid TFUEL rewards, a
   7-day rewards sparkline, offline notification, node logs and a **Copy diagnostics** button.
 - **Wallet** — reads the Edge Node's own internal wallet (the wallet the app creates and funds
@@ -90,9 +90,13 @@ export; the plugin only verifies the exported file's address. The advanced path 
 keystore in memory with the node password, is loopback-only, rate-limits failures, and returns the
 key only to the local pane. There is no agent tool for export, and the key is never logged.
 
-**Installer trust:** the download must end on an allowlisted HTTPS host; the installer must carry
-a valid Authenticode signature with a Theta-looking signer subject. The SHA-256 is shown in the
-pane. The installer is never bundled in this repository.
+**Installer trust:** the download must end on an allowlisted HTTPS host. The S3 redirect is accepted
+only under the `/assets.thetatoken.org/` path prefix. The installer is pinned in source by version
+and SHA-256 (`5.2.26` → `6acac6a905cdf74cce703d4b1ada0da18569b32781105ba1557003d10655f4eb`) and must
+carry the exact `Theta Labs, Inc.` Authenticode subject and certificate thumbprint
+`D5A10D49B0D0CCC53CDA4F3883AD7E23DB107001`. A mismatch is refused and the downloaded file is
+deleted; a new Theta build requires a catalog SHA bump, so `/node/update` only installs a reviewed
+release. The installer is never bundled in this repository.
 
 ## Legal / IP
 

@@ -23,7 +23,7 @@ if str(ROOT) not in sys.path:
 from theta_core import chain, diagnostics, edge_rpc, installer, keystore, state  # noqa: E402
 
 router = APIRouter()
-LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost", "testclient"}
+LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost"}
 _EXPORT_LOCK = threading.Lock()
 _EXPORT_FAILURES = {"count": 0, "until": 0.0}
 
@@ -49,7 +49,7 @@ def _wallet_address() -> tuple[str, str]:
 
 @router.get("/health")
 def health() -> dict[str, Any]:
-    return {"ok": True, "plugin": "theta-edge-node", "version": "0.2.0"}
+    return {"ok": True, "plugin": "theta-edge-node", "version": "0.3.0"}
 
 
 @router.get("/node/status")
@@ -95,7 +95,10 @@ def node_launch() -> Any:
     exe = installer.find_exe(state.load_settings().get("edge_node_path", ""))
     if not exe:
         return _error("Theta Edge Node is not installed", 409)
-    installer.launch(exe)
+    try:
+        installer.launch(exe)
+    except ValueError as exc:
+        return _error(str(exc), 409)
     state.save_settings({"last_running": True})
     return {"ok": True, "exe_path": str(exe)}
 
@@ -199,4 +202,8 @@ async def set_settings(request: Request) -> Any:
     body = await request.json()
     if not isinstance(body, dict):
         return _error("settings body must be an object")
+    if "edge_node_path" in body:
+        value = str(body.get("edge_node_path") or "")
+        if value and not installer.valid_override_path(value):
+            return _error("edge_node_path must point to Theta Edge Node.exe")
     return state.save_settings(body)
